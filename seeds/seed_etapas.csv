@@ -1,0 +1,5 @@
+id_etapa,nombre_etapa,descripcion,orden_etapa,anio_desde,anio_hasta
+PRE,Prepandemia,Antes de la COVID-19,1,2018,2019
+PAN,Pandemia,Año del confinamiento y de las restricciones más duras,2,2020,2020
+REC,Recuperación,Rebote de la actividad y retirada progresiva de las restricciones,3,2021,2022
+POS,Pospandemia,"Desde el fin de la emergencia sanitaria internacional (OMS, 5-may-2023)",4,2023,2025

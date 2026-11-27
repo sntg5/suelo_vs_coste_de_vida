@@ -1,0 +1,56 @@
+# =============================================================================
+# Tests singulares: qué comprueban y qué hacer si fallan
+# =============================================================================
+
+data_tests:
+  - name: assert_completitud_suelo_trimestral
+    description: >
+      Cada provincia tiene transacciones en los 32 trimestres. Si falla, falta
+      una provincia o un periodo; revisar el cruce con el seed (nombre_mivau con
+      un espacio o una tilde distintos) o el filtro de años.
+
+  - name: assert_completitud_ipc_mensual
+    description: >
+      Cada provincia y grupo tiene índice en los 96 meses. Si falla, revisar el
+      filtro de tipo_dato y el cruce por código de provincia en
+      int_ine__ipc_mensual_1fn.
+
+  - name: assert_conciliacion_transacciones_suelo
+    description: >
+      Suma de 50 provincias + Ceuta y Melilla = TOTAL NACIONAL de la tabla 1,
+      trimestre a trimestre. Si falla, revisar si hay una columna desplazada en
+      el unpivot por posición, una fila de nivel mal filtrada o un cambio en la
+      etiqueta del total o de Ceuta y Melilla. Las filas que no cuadran quedan
+      guardadas en dbt_jobs.
+
+  - name: assert_conciliacion_precio_suelo
+    description: >
+      La media ponderada de las 50 provincias queda a menos de ±3 % del TOTAL
+      NACIONAL de la tabla 4 (aviso). Si pasa de ±3 %, revisar los pesos o un
+      precio mal convertido (coma o punto).
+
+  - name: assert_precio_m2_nulos_esperados
+    description: >
+      Exactamente 3 precios nulos (Ávila y Soria 2T 2020, Ourense 2T 2024)
+      (aviso). Si cambia, hay un 'n.s.' nuevo en el ministerio o falla
+      FN_TEXTO_A_NUMERO; revisar el trimestre afectado.
+
+  - name: assert_completitud_compraventa_vivienda
+    description: >
+      Cada provincia y tipo de vivienda tiene compraventas en los 96 meses. Si
+      falla, revisar el filtro de provincia_ine, el cruce con el seed por código
+      y los CASE de id_tipo_vivienda en int_ine__compraventa_vivienda_1fn.
+
+  - name: assert_coherencia_compraventa_vivienda
+    description: >
+      En cada provincia y mes, libre + protegida = nueva + usada = Viviendas
+      Total del INE. Si falla, el INE ha cambiado una etiqueta de tipo o falta
+      el total de un mes; revisar las equivalencias de slv_tipo_vivienda y las
+      filas guardadas en dbt_jobs.
+
+  - name: assert_snapshot_una_version_vigente
+    description: >
+      Cada provincia, mes y tipo de vivienda tiene exactamente una versión
+      vigente (dbt_valid_to NULL) en snp_compraventa_vivienda. Si falla con 0,
+      ejecutar el snapshot; si falla con 2 o más, revisar la unique_key del
+      snapshot o si hay duplicados en slv_compraventa_vivienda_mensual.

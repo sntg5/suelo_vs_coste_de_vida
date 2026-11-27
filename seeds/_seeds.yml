@@ -1,0 +1,147 @@
+# =============================================================================
+# Seeds: tablas de correspondencia mantenidas a mano y versionadas en Git
+# =============================================================================
+# seed_provincias traduce cómo escribe cada fuente la provincia a su código
+# oficial del INE. Está desnormalizada a propósito (es cómoda de mantener) y
+# Silver la normaliza en slv_zona, slv_comunidad_autonoma y slv_provincia.
+# seed_etapas define las fases del periodo respecto a la pandemia.
+# Los códigos se cargan como texto: si no, dbt leería '01' como el número 1.
+# =============================================================================
+
+seeds:
+  - name: seed_provincias
+    description: >
+      Correspondencia de las 50 provincias del análisis (sin Ceuta ni Melilla):
+      código y nombre del INE, nombre en los Excel del ministerio, comunidad
+      autónoma y zona.
+    config:
+      column_types:
+        id_provincia: varchar(2)
+        nombre_provincia: varchar(50)
+        nombre_mivau: varchar(50)
+        id_ccaa: varchar(2)
+        nombre_ccaa: varchar(50)
+        id_zona: varchar(3)
+        nombre_zona: varchar(20)
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "(id_zona = 'NOR' AND nombre_zona = 'Norte') OR (id_zona = 'SUR' AND nombre_zona = 'Sur')"
+          description: >
+            El código y el nombre de la zona coinciden en cada fila. Si falla,
+            corregir la zona de esa fila en el CSV.
+    columns:
+      - name: id_provincia
+        description: Código oficial de la provincia en el INE (01-50), como texto.
+        data_tests:
+          - unique:
+              description: Cada provincia aparece una sola vez. Si falla, eliminar la fila repetida del CSV.
+          - not_null:
+              description: Todas las filas tienen código. Si falla, completar la fila vacía o incompleta del CSV.
+      - name: nombre_provincia
+        description: Nombre oficial en orden natural (para mostrar y para los mapas).
+        data_tests:
+          - unique:
+              description: No hay dos provincias con el mismo nombre. Si falla, corregir el nombre repetido en el CSV.
+          - not_null:
+              description: Todas las provincias tienen nombre. Si falla, completarlo en el CSV.
+      - name: nombre_mivau
+        description: >
+          Nombre exacto en los Excel del ministerio, sin espacios finales. Es la
+          clave para cruzar las tablas 1 y 4 del MIVAU con su código del INE.
+        data_tests:
+          - unique:
+              description: >
+                Cada nombre del ministerio corresponde a una sola provincia. Si
+                falla, corregir el CSV, porque el cruce con el MIVAU duplicaría filas.
+          - not_null:
+              description: >
+                Todas las provincias tienen su nombre del ministerio. Si falla,
+                completarlo en el CSV, porque esa provincia no cruzaría con el MIVAU.
+      - name: id_ccaa
+        description: Código oficial de la comunidad autónoma en el INE (01-17), como texto.
+        data_tests:
+          - not_null:
+              description: Todas las provincias tienen CCAA. Si falla, completarla en el CSV.
+      - name: nombre_ccaa
+        description: Nombre oficial de la comunidad autónoma en orden natural.
+        data_tests:
+          - not_null:
+              description: Todas las provincias tienen nombre de CCAA. Si falla, completarlo en el CSV.
+      - name: id_zona
+        description: Código de la zona (NOR o SUR), agrupación de comunidades autónomas.
+        data_tests:
+          - not_null:
+              description: Todas las provincias tienen zona. Si falla, completarla en el CSV.
+          - accepted_values:
+              arguments:
+                values: ['NOR', 'SUR']
+              description: Solo existen las zonas NOR y SUR. Si falla, corregir el código en el CSV.
+      - name: nombre_zona
+        description: Nombre de la zona (Norte o Sur).
+        data_tests:
+          - not_null:
+              description: Todas las provincias tienen nombre de zona. Si falla, completarlo en el CSV.
+
+  - name: seed_etapas
+    description: >
+      Fases del periodo respecto a la pandemia, con su rango de años. Los años
+      solo viven aquí; Silver los expresa con la clave slv_anio.id_etapa.
+    config:
+      column_types:
+        id_etapa: varchar(3)
+        nombre_etapa: varchar(30)
+        descripcion: varchar(200)
+        orden_etapa: number(1, 0)
+        anio_desde: number(4, 0)
+        anio_hasta: number(4, 0)
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "anio_desde <= anio_hasta"
+          description: Cada etapa empieza antes de terminar. Si falla, corregir los años de la etapa en el CSV.
+    columns:
+      - name: id_etapa
+        description: Código de la etapa.
+        data_tests:
+          - unique:
+              description: Cada etapa aparece una sola vez. Si falla, eliminar la fila repetida del CSV.
+          - not_null:
+              description: Todas las etapas tienen código. Si falla, completarlo en el CSV.
+          - accepted_values:
+              arguments:
+                values: ['PRE', 'PAN', 'REC', 'POS']
+              description: >
+                Solo existen las 4 etapas del diseño. Si falla, corregir el código
+                o comprobar si la etapa nueva está recogida en el diseño.
+      - name: nombre_etapa
+        description: Prepandemia, Pandemia, Recuperación o Pospandemia.
+        data_tests:
+          - unique:
+              description: No hay dos etapas con el mismo nombre. Si falla, corregir el CSV.
+          - not_null:
+              description: Todas las etapas tienen nombre. Si falla, completarlo en el CSV.
+      - name: descripcion
+        description: Qué periodo cubre la etapa.
+      - name: orden_etapa
+        description: Orden cronológico de la etapa, para ordenar los gráficos.
+        data_tests:
+          - unique:
+              description: Cada etapa tiene un orden distinto. Si falla, corregir el número repetido en el CSV.
+          - not_null:
+              description: Todas las etapas tienen orden. Si falla, completarlo en el CSV.
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                max_value: 4
+              description: El orden va de 1 a 4. Si falla, corregir el número en el CSV.
+      - name: anio_desde
+        description: Primer año de la etapa.
+        data_tests:
+          - not_null:
+              description: Todas las etapas tienen año de inicio. Si falla, completarlo en el CSV.
+      - name: anio_hasta
+        description: Último año de la etapa.
+        data_tests:
+          - not_null:
+              description: Todas las etapas tienen año de fin. Si falla, completarlo en el CSV.

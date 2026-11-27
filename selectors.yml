@@ -1,0 +1,57 @@
+# =============================================================================
+# Selectores con nombre
+# =============================================================================
+# Guardan selecciones de nodos con un nombre, para usarlas en el IDE y en los
+# jobs sin repetir la sintaxis de selección:
+#   dbt build --selector caso_1
+#   dbt ls --selector capa_silver
+# =============================================================================
+
+selectors:
+  - name: capa_silver
+    description: >
+      Todos los modelos de Silver, las vistas int_ (1FN) y las tablas slv_ (3FN),
+      con sus tests. Usa el tag silver que hereda la carpeta en dbt_project.yml.
+    definition:
+      method: tag
+      value: silver
+
+  - name: caso_1
+    description: >
+      El mart del caso 1 (mart_suelo_vs_ipc) y todo lo que necesita para
+      construirse: staging, Silver, dimensiones y hecho del suelo.
+    definition:
+      method: fqn
+      value: mart_suelo_vs_ipc
+      parents: true
+
+  - name: informe_power_bi
+    description: >
+      Todo lo que consume el informe de Power BI (la exposure
+      informe_suelo_vs_coste_de_vida) y lo que hay antes, hasta las fuentes.
+    definition:
+      method: exposure
+      value: informe_suelo_vs_coste_de_vida
+      parents: true
+
+  - name: entrega_vivienda
+    description: >
+      Lo que hay que reconstruir cuando llega una entrega nueva de la tabla 6150
+      del INE: el staging de compraventas y todo lo que depende de él (Silver,
+      snapshot, hecho y marts de los casos 2 y 3).
+    definition:
+      method: fqn
+      value: stg_ine__compraventa_viviendas
+      children: true
+
+  - name: todo_sin_snapshots
+    description: >
+      Todo el proyecto salvo el snapshot, para una ejecución que no deba tocar el
+      historial de revisiones.
+    definition:
+      union:
+        - method: fqn
+          value: "*"
+        - exclude:
+            - method: resource_type
+              value: snapshot

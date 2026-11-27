@@ -1,0 +1,34 @@
+# =============================================================================
+# Análisis: consultas que dbt compila pero no construye
+# =============================================================================
+# Sirven para explorar y comprobar, no para el consumo: no crean tablas ni
+# vistas y los jobs no las ejecutan. Se abren en Studio y se ejecutan con
+# Preview. Aparecen en la documentación y en el linaje.
+# =============================================================================
+
+analyses:
+  - name: exploracion_bronze
+    description: >
+      Valores reales, con su longitud y su número de filas, de las columnas de
+      texto de Bronze que usan los filtros, los CASE y los tests accepted_values
+      de staging y Silver.
+
+  - name: historial_snapshot_vivienda
+    description: >
+      Historial de revisiones del INE guardado por snp_compraventa_vivienda:
+      solo los datos con más de una versión, con su número de versión y su
+      estado (vigente o cerrada).
+
+  - name: cesta_fija_2018
+    description: >
+      Comprobación del efecto composición del caso 1. Compara la variación real
+      de España del mart (pesos de cada año) con la de una cesta fija de 2018
+      (pesos del año base), como hace el INE con el IPC.
+
+  - name: comprobacion_incremental
+    description: >
+      Estado de los dos modelos incrementales de vivienda: filas y último mes de
+      slv_compraventa_vivienda_mensual y de fct_compraventa_vivienda_mensual, y
+      compraventas de Madrid (libre, usada y total) de julio a diciembre de
+      2025. Se ejecuta antes y después de cargar una entrega nueva de la tabla
+      6150 del INE.
