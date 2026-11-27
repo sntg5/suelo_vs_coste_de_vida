@@ -1,0 +1,48 @@
+# =============================================================================
+# Snapshots (SCD tipo 2) definidos en YAML
+# =============================================================================
+# snp_compraventa_vivienda guarda el historial de revisiones del INE: la tabla
+# 6150 publica los últimos meses como provisionales y luego los corrige.
+# Bronze y Silver solo guardan el último valor publicado (Bronze sustituye el
+# fichero en cada carga y el incremental de Silver actualiza con merge); el
+# snapshot guarda cada versión de un dato que cambia, con su periodo de validez
+# (dbt_valid_from / dbt_valid_to). La versión vigente tiene dbt_valid_to NULL.
+# No es una dimensión que cambia: es el mecanismo SCD2 aplicado al dato
+# publicado que el origen corrige.
+# La base de datos y el esquema vienen de dbt_project.yml (snapshots:) y
+# respetan generate_schema_name.
+# =============================================================================
+
+snapshots:
+  - name: snp_compraventa_vivienda
+    description: >
+      Historial SCD2 de las compraventas de vivienda por provincia, mes y tipo.
+      Una fila por cada versión publicada de cada dato; la vigente tiene
+      dbt_valid_to NULL.
+    relation: ref('slv_compraventa_vivienda_mensual')
+    config:
+      unique_key: ['id_provincia', 'id_mes', 'id_tipo_vivienda']
+      strategy: check
+      check_cols: ['num_compraventas']
+    columns:
+      - name: id_provincia
+        description: Provincia (parte de la clave).
+      - name: id_mes
+        description: Mes (parte de la clave).
+      - name: id_tipo_vivienda
+        description: Tipo de vivienda (parte de la clave).
+      - name: num_compraventas
+        description: Valor publicado por el INE en esa versión.
+      - name: dbt_scd_id
+        description: Identificador de cada versión, que dbt calcula con la clave y los valores de check_cols.
+        data_tests:
+          - unique:
+              description: Cada versión aparece una sola vez. Si falla, revisar la unique_key del snapshot.
+          - not_null:
+              description: Toda versión tiene identificador. Si falla, revisar la configuración del snapshot.
+      - name: dbt_updated_at
+        description: Momento en que dbt registró la versión.
+      - name: dbt_valid_from
+        description: Desde cuándo es válida la versión.
+      - name: dbt_valid_to
+        description: Hasta cuándo fue válida; NULL en la versión vigente.

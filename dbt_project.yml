@@ -1,0 +1,133 @@
+# =============================================================================
+# dbt_project.yml · suelo_vs_coste_de_vida
+# =============================================================================
+# Suelo urbano frente al IPC en España, por provincias (2018-2025).
+# Configuración central del proyecto: rutas, variables, hooks y configuración
+# por defecto de cada carpeta. Las configs se heredan por carpeta y un modelo
+# puede sobrescribirlas con config(). El prefijo + indica que la clave es una
+# config y no una subcarpeta.
+# =============================================================================
+
+name: suelo_vs_coste_de_vida
+version: '1.0.0'
+
+# Solo se usa al ejecutar dbt en local con profiles.yml. En dbt Platform la
+# conexión y las credenciales se definen en cada entorno.
+profile: default
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+# Los bloques {% docs %} solo se buscan en esta carpeta. La documentación
+# general del proyecto (diseño, diagramas, decisiones) vive en documentacion/.
+docs-paths: ["docs"]
+
+clean-targets: ["target", "dbt_packages"]
+
+# =============================================================================
+# Variables del proyecto
+# =============================================================================
+# Se leen con var('nombre') y se pueden sobrescribir en una ejecución:
+#   dbt build --vars '{umbral_fiabilidad: 30}'
+vars:
+  # Periodo de análisis: Bronze guarda la serie completa y Silver filtra estos años
+  anio_inicio: 2018
+  anio_fin: 2025
+  # Año base del precio hipotético (precio y IPC medios de ese año)
+  anio_base: 2018
+  # Por debajo de este número de compraventas de suelo, el trimestre es poco fiable
+  umbral_fiabilidad: 20
+  # Ventana de revisión de los modelos incrementales de vivienda: en cada
+  # ejecución se vuelven a procesar los últimos meses_revision meses ya
+  # cargados, porque el INE revisa sus datos provisionales cuando publica el
+  # mismo mes del año siguiente
+  meses_revision: 12
+
+# =============================================================================
+# Hooks de ejecución
+# =============================================================================
+# Al terminar cada ejecución se escribe en el log un resumen OK / WARN / ERROR.
+on-run-end:
+  - "{{ log_run_summary(results) }}"
+
+# =============================================================================
+# Modelos · Bronze → Staging → Silver → Gold
+# =============================================================================
+# Cada capa escribe en su base de datos, que llega por variable de entorno:
+# el mismo código sirve en desarrollo, DEV y PRO. Bronze no aparece aquí:
+# dbt solo la lee con source() y nunca escribe en ella.
+# Cada capa lleva un tag con su nombre para poder seleccionarla:
+#   dbt build --select tag:silver
+# =============================================================================
+models:
+  suelo_vs_coste_de_vida:
+    # Tablas permanentes de Snowflake (con Fail-safe), no transient
+    +transient: false
+
+    # Staging: vistas 1:1 con Bronze (renombrar, trim y convertir con las UDFs).
+    # Vistas: no ocupan almacenamiento y siempre reflejan Bronze.
+    staging:
+      +materialized: view
+      +database: "{{ env_var('DBT_SILVER_DB') }}"
+      +schema: staging
+      +tags: ['staging']
+
+    # Silver: tablas 3FN (slv_), con carga completa en cada ejecución, salvo
+    # slv_compraventa_vivienda_mensual, que es incremental (merge) y lo indica
+    # en su config(). En intermediate/ van las vistas de paso a 1FN (int_), en
+    # el mismo esquema.
+    silver:
+      +materialized: table
+      +database: "{{ env_var('DBT_SILVER_DB') }}"
+      +schema: silver
+      +tags: ['silver']
+      intermediate:
+        +materialized: view
+
+    # Gold: estrella (dim_ y fct_ como tablas, salvo fct_compraventa_vivienda_mensual,
+    # que es incremental con delete+insert y lo indica en su config()) y
+    # Data Mart (mart_ como vistas)
+    gold:
+      +database: "{{ env_var('DBT_GOLD_DB') }}"
+      +tags: ['gold']
+      core:
+        +materialized: table
+        +schema: core
+      marts:
+        +materialized: view
+        +schema: marts
+
+# =============================================================================
+# Seeds: tablas de correspondencia pequeñas y versionadas en Git
+# =============================================================================
+# Van a Silver y no a Bronze: Bronze solo la escribe la carga de Snowflake.
+# Los tipos de cada columna se fijan en seeds/_seeds.yml.
+seeds:
+  suelo_vs_coste_de_vida:
+    +database: "{{ env_var('DBT_SILVER_DB') }}"
+    +schema: seeds
+    +tags: ['seeds']
+
+# =============================================================================
+# Snapshots
+# =============================================================================
+# Historial SCD2 de las revisiones del INE. Nunca transient: el snapshot es la
+# única copia de la historia y no se puede reconstruir desde Bronze.
+snapshots:
+  suelo_vs_coste_de_vida:
+    +database: "{{ env_var('DBT_SILVER_DB') }}"
+    +schema: snapshots
+    +transient: false
+
+# =============================================================================
+# Tests
+# =============================================================================
+# Los tests con store_failures guardan sus filas fallidas en el esquema
+# dbt_jobs de la base por defecto del entorno (la Silver de cada entorno).
+data_tests:
+  suelo_vs_coste_de_vida:
+    +schema: dbt_jobs

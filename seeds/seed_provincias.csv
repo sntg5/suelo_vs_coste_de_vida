@@ -1,0 +1,51 @@
+id_provincia,nombre_provincia,nombre_mivau,id_ccaa,nombre_ccaa,id_zona,nombre_zona
+01,Araba/Álava,Álava,16,País Vasco,NOR,Norte
+02,Albacete,Albacete,08,Castilla-La Mancha,SUR,Sur
+03,Alicante/Alacant,Alicante/Alacant,10,Comunitat Valenciana,SUR,Sur
+04,Almería,Almería,01,Andalucía,SUR,Sur
+05,Ávila,Avila,07,Castilla y León,NOR,Norte
+06,Badajoz,Badajoz,11,Extremadura,SUR,Sur
+07,Illes Balears,Balears (Illes),04,Illes Balears,SUR,Sur
+08,Barcelona,Barcelona,09,Cataluña,NOR,Norte
+09,Burgos,Burgos,07,Castilla y León,NOR,Norte
+10,Cáceres,Cáceres,11,Extremadura,SUR,Sur
+11,Cádiz,Cádiz,01,Andalucía,SUR,Sur
+12,Castellón/Castelló,Castellón/Castelló,10,Comunitat Valenciana,SUR,Sur
+13,Ciudad Real,Ciudad Real,08,Castilla-La Mancha,SUR,Sur
+14,Córdoba,Córdoba,01,Andalucía,SUR,Sur
+15,A Coruña,Coruña (A),12,Galicia,NOR,Norte
+16,Cuenca,Cuenca,08,Castilla-La Mancha,SUR,Sur
+17,Girona,Girona,09,Cataluña,NOR,Norte
+18,Granada,Granada,01,Andalucía,SUR,Sur
+19,Guadalajara,Guadalajara,08,Castilla-La Mancha,SUR,Sur
+20,Gipuzkoa,Guipúzcoa,16,País Vasco,NOR,Norte
+21,Huelva,Huelva,01,Andalucía,SUR,Sur
+22,Huesca,Huesca,02,Aragón,NOR,Norte
+23,Jaén,Jaén,01,Andalucía,SUR,Sur
+24,León,León,07,Castilla y León,NOR,Norte
+25,Lleida,Lleida,09,Cataluña,NOR,Norte
+26,La Rioja,Rioja (La),17,La Rioja,NOR,Norte
+27,Lugo,Lugo,12,Galicia,NOR,Norte
+28,Madrid,Madrid (Comunidad de),13,Comunidad de Madrid,NOR,Norte
+29,Málaga,Málaga,01,Andalucía,SUR,Sur
+30,Murcia,Murcia (Región de),14,Región de Murcia,SUR,Sur
+31,Navarra,Navarra (Comunidad Foral de),15,Comunidad Foral de Navarra,NOR,Norte
+32,Ourense,Ourense,12,Galicia,NOR,Norte
+33,Asturias,Asturias (Principado de ),03,Principado de Asturias,NOR,Norte
+34,Palencia,Palencia,07,Castilla y León,NOR,Norte
+35,Las Palmas,Palmas (Las),05,Canarias,SUR,Sur
+36,Pontevedra,Pontevedra,12,Galicia,NOR,Norte
+37,Salamanca,Salamanca,07,Castilla y León,NOR,Norte
+38,Santa Cruz de Tenerife,Santa Cruz de Tenerife,05,Canarias,SUR,Sur
+39,Cantabria,Cantabria,06,Cantabria,NOR,Norte
+40,Segovia,Segovia,07,Castilla y León,NOR,Norte
+41,Sevilla,Sevilla,01,Andalucía,SUR,Sur
+42,Soria,Soria,07,Castilla y León,NOR,Norte
+43,Tarragona,Tarragona,09,Cataluña,NOR,Norte
+44,Teruel,Teruel,02,Aragón,NOR,Norte
+45,Toledo,Toledo,08,Castilla-La Mancha,SUR,Sur
+46,Valencia/València,Valencia/València,10,Comunitat Valenciana,SUR,Sur
+47,Valladolid,Valladolid,07,Castilla y León,NOR,Norte
+48,Bizkaia,Vizcaya,16,País Vasco,NOR,Norte
+49,Zamora,Zamora,07,Castilla y León,NOR,Norte
+50,Zaragoza,Zaragoza,02,Aragón,NOR,Norte

@@ -1,0 +1,9 @@
+# =============================================================================
+# Paquetes del proyecto. Se instalan con: dbt deps
+# =============================================================================
+# dbt_utils aporta date_spine (calendario), generate_surrogate_key (claves
+# subrogadas de Gold) y los tests unique_combination_of_columns,
+# accepted_range y expression_is_true.
+packages:
+  - package: dbt-labs/dbt_utils
+    version: [">=1.3.0", "<2.0.0"]
