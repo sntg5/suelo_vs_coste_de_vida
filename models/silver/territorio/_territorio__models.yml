@@ -1,0 +1,94 @@
+# =============================================================================
+# Silver · territorio: zona → comunidad autónoma → provincia (3FN)
+# =============================================================================
+# Las tres tablas salen de seed_provincias normalizado. Los tipos los fija el
+# CAST de cada modelo; PK, FK y UNIQUE los vigilan estos tests.
+# =============================================================================
+
+models:
+  - name: slv_zona
+    description: Una fila por zona (2).
+    columns:
+      - name: id_zona
+        description: Código de la zona.
+        data_tests:
+          - unique:
+              description: PK. Si falla, el seed tiene la misma zona con dos nombres; corregir el seed.
+          - not_null:
+              description: PK. Si falla, hay una provincia sin zona; completarla en el seed.
+          - accepted_values:
+              arguments:
+                values: ['NOR', 'SUR']
+              description: Solo existen NOR y SUR. Si falla, corregir el código en el seed.
+      - name: nombre_zona
+        description: Norte o Sur.
+        data_tests:
+          - unique:
+              description: Si falla, dos códigos de zona tienen el mismo nombre; corregir el seed.
+          - not_null:
+              description: Si falla, completar el nombre de la zona en el seed.
+
+  - name: slv_comunidad_autonoma
+    description: Una fila por comunidad autónoma (17).
+    columns:
+      - name: id_ccaa
+        description: Código oficial del INE (01-17).
+        data_tests:
+          - unique:
+              description: >
+                PK. Si falla, el seed tiene una CCAA con dos nombres o dos zonas y
+                no se cumple la dependencia provincia → CCAA → zona; corregir el seed.
+          - not_null:
+              description: PK. Si falla, hay una provincia sin CCAA; completarla en el seed.
+      - name: nombre_ccaa
+        description: Nombre oficial en orden natural.
+        data_tests:
+          - unique:
+              description: Si falla, dos códigos de CCAA tienen el mismo nombre; corregir el seed.
+          - not_null:
+              description: Si falla, completar el nombre de la CCAA en el seed.
+      - name: id_zona
+        description: Zona de la CCAA.
+        data_tests:
+          - not_null:
+              description: FK. Si falla, hay una CCAA sin zona; completarla en el seed.
+          - relationships:
+              arguments:
+                to: ref('slv_zona')
+                field: id_zona
+              description: FK. Si falla, la CCAA apunta a una zona que no existe; revisar el código de zona en el seed.
+
+  - name: slv_provincia
+    description: Una fila por provincia (50).
+    columns:
+      - name: id_provincia
+        description: Código oficial del INE (01-50).
+        data_tests:
+          - unique:
+              description: PK. Si falla, eliminar la provincia repetida del seed.
+          - not_null:
+              description: PK. Si falla, completar el código en el seed.
+      - name: nombre_provincia
+        description: Nombre oficial en orden natural (para mostrar y para los mapas).
+        data_tests:
+          - unique:
+              description: Si falla, dos provincias tienen el mismo nombre; corregir el seed.
+          - not_null:
+              description: Si falla, completar el nombre en el seed.
+      - name: nombre_mivau
+        description: Nombre exacto en los Excel del ministerio (para cruzar las tablas 1 y 4).
+        data_tests:
+          - unique:
+              description: Si falla, el cruce con el MIVAU duplicaría filas; corregir el seed.
+          - not_null:
+              description: Si falla, esa provincia no cruzaría con el MIVAU; completar el nombre en el seed.
+      - name: id_ccaa
+        description: CCAA de la provincia.
+        data_tests:
+          - not_null:
+              description: FK. Si falla, completar la CCAA en el seed.
+          - relationships:
+              arguments:
+                to: ref('slv_comunidad_autonoma')
+                field: id_ccaa
+              description: FK. Si falla, la provincia apunta a una CCAA que no existe; revisar el código en el seed.

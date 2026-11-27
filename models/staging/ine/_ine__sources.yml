@@ -1,0 +1,109 @@
+# =============================================================================
+# Source ine · capa Bronze
+# =============================================================================
+# Dos tablas del INE descargadas en CSV y cargadas con SP_CARGAR_BRONZE, sin
+# la cabecera y con todas las columnas como texto. dbt solo lee Bronze.
+# Freshness sobre _loaded_at: aviso a los 35 días y error a los 100.
+# =============================================================================
+
+sources:
+  - name: ine
+    description: Instituto Nacional de Estadística (INE).
+    database: "{{ env_var('DBT_BRONZE_DB') }}"
+    schema: ine
+    config:
+      loaded_at_field: _loaded_at
+      freshness:
+        warn_after: {count: 35, period: day}
+        error_after: {count: 100, period: day}
+
+    tables:
+      - name: ipc_provincial
+        description: >
+          Tabla 50918: índices provinciales del IPC, general y por grupos
+          ECOICOP, base 2021 = 100. 793.728 filas, de 2002M01 a 2025M12.
+        columns:
+          - name: provincias
+            description: Código INE y nombre en el mismo campo (`01 Araba/Álava`), o `Nacional`.
+            data_tests:
+              - not_null:
+                  description: Toda fila tiene territorio. Si falla, comprobar si el CSV viene con otro formato.
+          - name: grupos_ecoicop
+            description: Código y nombre del grupo (`04 Vivienda, agua…`); `Índice general` no trae código.
+            data_tests:
+              - not_null:
+                  description: Toda fila tiene grupo. Si falla, comprobar si el CSV viene con otro formato.
+          - name: tipo_de_dato
+            description: Qué significa la columna total en esa fila (índice o una de 3 variaciones).
+            data_tests:
+              - accepted_values:
+                  arguments:
+                    values: ['Índice', 'Variación mensual', 'Variación anual', 'Variación en lo que va de año']
+                  description: >
+                    Solo hay estos 4 tipos de dato. Si falla, el INE ha cambiado
+                    una etiqueta y el filtro de 'Índice' en int_ine__ipc_mensual_1fn
+                    perdería filas; actualizar el filtro.
+          - name: periodo
+            description: Mes como texto (`2025M12`).
+            data_tests:
+              - not_null:
+                  description: Toda fila tiene periodo. Si falla, comprobar si el CSV viene con otro formato.
+          - name: total
+            description: Valor con coma decimal (`119,942`).
+            data_tests:
+              - not_null:
+                  description: >
+                    El fichero no trae huecos. Si falla, hay celdas vacías nuevas;
+                    identificar esas filas antes de seguir.
+          - name: _fila
+            description: Número de fila del fichero (1 = primera fila de datos).
+            data_tests:
+              - unique:
+                  description: >
+                    Cada fila se carga una vez. Si falla, el fichero se ha cargado
+                    dos veces sin TRUNCATE y hay que repetir la carga.
+          - name: _loaded_at
+            description: Momento de la carga en Bronze. Lo usa el freshness.
+
+      - name: compraventa_viviendas
+        description: >
+          Tabla 6150: compraventa de viviendas según régimen y estado, mensual,
+          con filas de nación, CCAA y provincia. 85.320 filas, de 2007M01 a
+          2026M09. Los últimos meses son provisionales y el INE los revisa.
+        columns:
+          - name: total_nacional
+            description: Nivel nacional (siempre relleno).
+          - name: comunidades_y_ciudades_autonomas
+            description: Código y nombre de la CCAA; vacío en las filas nacionales.
+          - name: provincias
+            description: Código y nombre de la provincia; vacío en las filas de nación y de CCAA.
+          - name: regimen_y_estado
+            description: Dos clasificaciones en una columna (régimen y estado) más el total.
+            data_tests:
+              - accepted_values:
+                  arguments:
+                    values: ['Viviendas: Total', 'Vivienda libre', 'Vivienda protegida', 'Vivienda nueva', 'Vivienda usada']
+                  description: >
+                    Solo hay estas 5 categorías. Si falla, el INE ha cambiado una
+                    etiqueta; revisar las equivalencias de slv_tipo_vivienda.
+          - name: periodo
+            description: Mes como texto (`2025M12`).
+            data_tests:
+              - not_null:
+                  description: Toda fila tiene periodo. Si falla, comprobar si el CSV viene con otro formato.
+          - name: total
+            description: Número de compraventas con punto de miles (`54.548`).
+            data_tests:
+              - not_null:
+                  description: >
+                    El fichero no trae huecos. Si falla, hay celdas vacías nuevas;
+                    identificar esas filas antes de seguir.
+          - name: _fila
+            description: Número de fila del fichero (1 = primera fila de datos).
+            data_tests:
+              - unique:
+                  description: >
+                    Cada fila se carga una vez. Si falla, el fichero se ha cargado
+                    dos veces sin TRUNCATE y hay que repetir la carga.
+          - name: _loaded_at
+            description: Momento de la carga en Bronze. Lo usa el freshness.

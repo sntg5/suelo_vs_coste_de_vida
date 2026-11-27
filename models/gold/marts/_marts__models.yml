@@ -1,0 +1,310 @@
+# =============================================================================
+# Gold · Data Mart: una vista por caso de uso
+# =============================================================================
+# Cada mart lleva sus propias columnas de territorio y tiempo (en Power BI se
+# usa solo, sin relacionarlo con las dimensiones) y guarda numerador y
+# denominador junto a cada ratio.
+# =============================================================================
+
+models:
+  - name: mart_suelo_vs_ipc
+    description: >
+      Caso 1, ¿el suelo sube más que el coste de vida? Una fila por territorio
+      y año en 4 niveles (Provincia, CCAA, Zona y España): 560 filas. El nivel
+      se filtra siempre, porque los códigos de provincia y de CCAA se repiten
+      (09 es Burgos y también Cataluña).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['nivel', 'id_territorio', 'anio']
+          description: Una fila por nivel, territorio y año. Si falla, revisar los GROUPING SETS.
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "(anio = {{ var('anio_base') }}) = (es_buena_compra IS NULL)"
+          description: Buena Compra es NULL solo en el año base. Si falla, revisar el cálculo de es_buena_compra.
+    columns:
+      - name: nivel
+        description: "{{ doc('nivel_territorio') }}"
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['Provincia', 'CCAA', 'Zona', 'España']
+              description: Solo existen los 4 niveles del diseño. Si falla, revisar el CASE con GROUPING.
+      - name: id_territorio
+        description: Código del territorio en su nivel (código INE de provincia o CCAA, NOR o SUR, ES).
+        data_tests:
+          - not_null:
+              description: Si falla, revisar el COALESCE de id_territorio.
+      - name: territorio
+        description: Nombre del territorio para mostrar.
+      - name: id_ccaa
+        description: CCAA del territorio (vacío en los niveles Zona y España).
+      - name: zona
+        description: Zona del territorio (vacía en el nivel España).
+      - name: anio
+        description: Año.
+      - name: id_etapa
+        description: "{{ doc('etapa') }}"
+      - name: transacciones_con_precio
+        description: Denominador de las medias ponderadas (aditiva).
+      - name: precio_x_transacciones
+        description: Numerador del precio medio ponderado (aditiva).
+      - name: hipotetico_x_transacciones
+        description: Numerador del precio hipotético ponderado (aditiva).
+      - name: precio_medio
+        description: Precio medio del m² ponderado por las transacciones con precio.
+        data_tests:
+          - not_null:
+              description: Todos los territorios tienen precio cada año. Si falla, revisar transacciones_con_precio en el hecho.
+          - valores_positivos:
+              description: Un precio medio es siempre positivo. Si falla, revisar precio_x_transacciones en fct_suelo_trimestral.
+      - name: precio_hipotetico
+        description: "{{ doc('precio_hipotetico') }}"
+        data_tests:
+          - not_null:
+              description: Si falla, revisar precio_hipotetico en el hecho.
+          - valores_positivos:
+              description: Un precio hipotético es siempre positivo. Si falla, revisar precio_hipotetico y hipotetico_x_transacciones en fct_suelo_trimestral.
+      - name: diferencia
+        description: precio_medio − precio_hipotetico. Negativa = el suelo va por detrás del coste de vida.
+      - name: variacion_precio_vs_2018
+        description: Subida del precio medio frente al año base.
+      - name: variacion_ipc_vs_2018
+        description: >
+          Subida del precio hipotético frente al año base. En provincia sigue al
+          IPC provincial; por encima, es el coste de vida ponderado por
+          compraventas de suelo (no el IPC oficial de la CCAA).
+      - name: variacion_real_vs_2018
+        description: Variación del precio descontada la del coste de vida.
+      - name: variacion_interanual_precio
+        description: Variación del precio medio frente al año anterior.
+      - name: es_buena_compra
+        description: KPI principal. TRUE si el precio medio es menor que el hipotético. NULL en el año base.
+      - name: es_buena_venta
+        description: KPI secundario. TRUE si la diferencia mejora respecto al año anterior. NULL en el año base.
+      - name: trimestres_poco_fiables
+        description: Trimestres de provincia con menos compraventas que el umbral de fiabilidad.
+
+  - name: mart_coste_vida
+    description: >
+      Caso 4, ¿dónde y en qué ha subido más el coste de vida? Una fila por
+      provincia, grupo de gasto y año: 5.200 filas. Solo nivel provincia, porque
+      el IPC no se agrega sin las ponderaciones del INE. La cifra de España se
+      cita con el IPC Nacional del INE.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['id_provincia', 'id_grupo', 'anio']
+          description: Una fila por provincia, grupo y año. Si falla, revisar el GROUP BY de por_anio.
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "(anio = {{ var('anio_base') }}) = (ranking_provincias IS NULL)"
+          description: El ranking es NULL solo en el año base. Si falla, revisar el cálculo de ranking_provincias.
+    columns:
+      - name: id_provincia
+        description: Código INE de la provincia.
+      - name: provincia
+        description: Nombre de la provincia en orden natural (categoría geográfica del mapa).
+      - name: id_ccaa
+        description: Código INE de la comunidad autónoma, para filtrar.
+      - name: ccaa
+        description: Nombre de la comunidad autónoma.
+      - name: zona
+        description: Norte o Sur.
+      - name: id_grupo
+        description: Código ECOICOP del grupo de gasto (00 = Índice general).
+      - name: nombre_grupo
+        description: Nombre del grupo de gasto.
+      - name: nombre_grupo_corto
+        description: Rótulo corto del grupo para los gráficos, el mismo de dim_grupo_ipc.
+      - name: es_indice_general
+        description: TRUE en la cesta completa. El mapa la usa por defecto y las barras por grupo la excluyen.
+      - name: es_grupo_vivienda
+        description: TRUE en el grupo 04, vivienda (alquiler y suministros, no la compra).
+      - name: anio
+        description: Año.
+      - name: ipc_medio_anual
+        description: Media de los 12 índices mensuales del año (base 2021 = 100).
+        data_tests:
+          - not_null:
+              description: Si falla, falta el índice de algún mes; revisar fct_ipc_mensual.
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+              description: Un índice es siempre positivo. Si falla, revisar fct_ipc_mensual.
+      - name: variacion_vs_2018
+        description: Subida acumulada del IPC medio frente al año base (0,211 = +21,1 %).
+        data_tests:
+          - not_null:
+              description: Si falla, falta el año base de esa provincia y grupo; revisar el filtro de años de Silver.
+      - name: variacion_interanual
+        description: Variación del IPC medio frente al año anterior; NULL en el primer año.
+      - name: ranking_provincias
+        description: >
+          Posición de la provincia por la subida acumulada frente al año base,
+          dentro de cada grupo y año (1 = la que más sube). NULL en el año base.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                max_value: 50
+              description: Hay 50 provincias. Si falla, revisar la partición del RANK por grupo y año.
+
+  - name: mart_pandemia
+    description: >
+      Caso 2, la pandemia, caída y rebote del suelo y la vivienda. Una fila por
+      territorio y mes en 2 niveles (Provincia y España): 4.896 filas. El suelo
+      solo tiene valor en el primer mes de cada trimestre. El nivel se filtra
+      siempre.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['nivel', 'id_territorio', 'id_mes']
+          description: Una fila por nivel, territorio y mes. Si falla, revisar los GROUPING SETS.
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "(MOD(id_mes, 100) IN (1, 4, 7, 10)) = (num_transacciones_suelo IS NOT NULL)"
+          description: >
+            El suelo tiene valor en el primer mes de cada trimestre y solo en él.
+            Si falla, revisar el cruce con fct_suelo_trimestral por id_mes.
+    columns:
+      - name: nivel
+        description: "{{ doc('nivel_territorio') }}"
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['Provincia', 'España']
+              description: Solo existen los 2 niveles del diseño. Si falla, revisar el CASE con GROUPING.
+      - name: id_territorio
+        description: Código INE de la provincia, o ES para España.
+        data_tests:
+          - not_null:
+              description: Si falla, revisar el COALESCE de id_territorio.
+      - name: territorio
+        description: Nombre del territorio para mostrar.
+      - name: id_ccaa
+        description: CCAA de la provincia, para filtrar (vacío en el nivel España).
+      - name: id_mes
+        description: Mes (AAAAMM).
+      - name: fecha_inicio_mes
+        description: Día 1 del mes, eje de tiempo continuo en Power BI.
+      - name: id_trimestre
+        description: Trimestre del mes (AAAAT), para ordenar etiqueta_trimestre.
+      - name: etiqueta_trimestre
+        description: Etiqueta del trimestre (2020-T2) para el eje del suelo.
+      - name: anio
+        description: Año.
+      - name: id_etapa
+        description: Código de la etapa (PRE, PAN, REC o POS).
+      - name: etapa
+        description: "{{ doc('etapa') }}"
+      - name: orden_etapa
+        description: Orden de la etapa, para "Ordenar por columna" en Power BI.
+      - name: num_transacciones_suelo
+        description: Compraventas de suelo del trimestre (solo en su primer mes; aditiva).
+      - name: transacciones_con_precio
+        description: Denominador del precio medio ponderado (aditiva).
+      - name: precio_x_transacciones
+        description: Numerador del precio medio ponderado (aditiva).
+      - name: precio_medio
+        description: Precio medio del m² de suelo ponderado por las transacciones con precio (solo en el primer mes de cada trimestre).
+        data_tests:
+          - valores_positivos:
+              description: Un precio medio es siempre positivo. Si falla, revisar precio_x_transacciones en fct_suelo_trimestral.
+      - name: variacion_interanual_precio
+        description: Variación del precio medio frente al mismo trimestre del año anterior.
+      - name: variacion_interanual_transacciones_suelo
+        description: Variación de las compraventas de suelo frente al mismo trimestre del año anterior.
+      - name: num_compraventas_vivienda
+        description: Compraventas de vivienda del mes (libre + protegida; aditiva).
+        data_tests:
+          - not_null:
+              description: Hay compraventas de vivienda todos los meses. Si falla, revisar el cruce con fct_compraventa_vivienda_mensual.
+      - name: variacion_interanual_compraventas_vivienda
+        description: Variación de las compraventas de vivienda frente al mismo mes del año anterior.
+
+  - name: mart_territorio
+    description: >
+      Caso 3, mapa del mercado. Una fila por territorio y año en 4 niveles
+      (Provincia, CCAA, Zona y España): 560 filas. Cruza suelo y vivienda
+      agregando cada hecho por su cuenta a provincia × año. El nivel se filtra
+      siempre, porque los códigos de provincia y de CCAA se repiten.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['nivel', 'id_territorio', 'anio']
+          description: Una fila por nivel, territorio y año. Si falla, revisar los GROUPING SETS.
+    columns:
+      - name: nivel
+        description: "{{ doc('nivel_territorio') }}"
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['Provincia', 'CCAA', 'Zona', 'España']
+              description: Solo existen los 4 niveles del diseño. Si falla, revisar el CASE con GROUPING.
+      - name: id_territorio
+        description: Código del territorio en su nivel (código INE de provincia o CCAA, NOR o SUR, ES).
+        data_tests:
+          - not_null:
+              description: Si falla, revisar el COALESCE de id_territorio.
+      - name: territorio
+        description: Nombre del territorio para mostrar.
+      - name: id_ccaa
+        description: CCAA del territorio (vacío en los niveles Zona y España).
+      - name: zona
+        description: Zona del territorio (vacía en el nivel España).
+      - name: anio
+        description: Año.
+      - name: precio_x_transacciones
+        description: Numerador del precio medio ponderado (aditiva).
+      - name: transacciones_con_precio
+        description: Denominador del precio medio ponderado (aditiva).
+      - name: precio_medio
+        description: Precio medio del m² de suelo ponderado por las transacciones con precio.
+        data_tests:
+          - not_null:
+              description: Todos los territorios tienen precio cada año. Si falla, revisar el cruce con suelo_anual.
+          - valores_positivos:
+              description: Un precio medio es siempre positivo. Si falla, revisar precio_x_transacciones en fct_suelo_trimestral.
+      - name: ranking_precio
+        description: Posición por precio medio dentro de cada nivel y año (1 = el más caro).
+        data_tests:
+          - not_null:
+              description: Si falla, falta el precio medio de algún territorio; revisar precio_medio.
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                max_value: 50
+              description: Como mucho hay 50 territorios por nivel. Si falla, revisar la partición del RANK por nivel y año.
+      - name: num_transacciones_suelo
+        description: Compraventas de suelo del año (aditiva; denominador de viviendas_por_compraventa_suelo).
+      - name: num_compraventas_vivienda
+        description: Compraventas de vivienda del año, libre + protegida (aditiva; denominador de las cuotas).
+        data_tests:
+          - not_null:
+              description: Todos los territorios tienen compraventas de vivienda. Si falla, revisar el cruce con vivienda_anual.
+      - name: num_nueva
+        description: Compraventas de vivienda nueva del año (numerador de cuota_nueva).
+      - name: num_protegida
+        description: Compraventas de vivienda protegida del año (numerador de cuota_protegida).
+      - name: cuota_nueva
+        description: Parte de las compraventas de vivienda que son de vivienda nueva (0,217 = 21,7 %).
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+              description: Una cuota va de 0 a 1. Si falla, revisar num_nueva y num_compraventas_vivienda.
+      - name: cuota_protegida
+        description: Parte de las compraventas de vivienda que son de vivienda protegida.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+              description: Una cuota va de 0 a 1. Si falla, revisar num_protegida y num_compraventas_vivienda.
+      - name: viviendas_por_compraventa_suelo
+        description: Compraventas de vivienda por cada compraventa de suelo del año.
+      - name: variacion_compraventas_vs_2018
+        description: Crecimiento de las compraventas de vivienda frente al año base (0,37 = +37 %).

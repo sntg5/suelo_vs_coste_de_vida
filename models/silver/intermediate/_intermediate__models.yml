@@ -1,0 +1,61 @@
+# =============================================================================
+# Modelos intermedios de Silver: paso a 1FN y calendario
+# =============================================================================
+# Vistas de apoyo. Los tests de calidad completos (completitud, rangos,
+# claves foráneas) van en las tablas slv_; aquí solo se comprueba el grano,
+# para detectar pronto un error del unpivot o del cruce con el seed.
+# =============================================================================
+
+models:
+  - name: int_calendario_mensual
+    description: >
+      Un mes por fila entre anio_inicio y anio_fin, generado con
+      dbt_utils.date_spine (no depende de los datos).
+    columns:
+      - name: id_mes
+        description: Clave AAAAMM (202005 = mayo de 2020).
+        data_tests:
+          - unique:
+              description: Cada mes aparece una vez. Si falla, revisar los argumentos de date_spine.
+          - not_null:
+              description: Todos los meses tienen clave. Si falla, revisar el cálculo de id_mes.
+
+  - name: int_mivau__suelo_trimestral_1fn
+    description: >
+      Una fila por provincia y trimestre con el precio medio del m² (tabla 4)
+      y las transacciones (tabla 1) del MIVAU. 50 provincias × 32 trimestres.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['id_provincia', 'id_trimestre']
+          description: >
+            Una sola fila por provincia y trimestre. Si falla, un nombre del
+            ministerio cruza con dos provincias del seed o el unpivot repite una
+            columna; revisar nombre_mivau en el seed y la macro unpivot_trimestres.
+
+  - name: int_ine__ipc_mensual_1fn
+    description: >
+      Una fila por provincia, mes y grupo ECOICOP con el índice del IPC (base
+      2021 = 100). 50 provincias × 96 meses × 13 grupos.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['id_provincia', 'id_mes', 'id_grupo']
+          description: >
+            Una sola fila por provincia, mes y grupo. Si falla, hay un grupo sin
+            código además del Índice general (los dos pasarían a '00') o el
+            filtro de tipo_dato deja pasar variaciones; revisar
+            separar_codigo_nombre y el filtro.
+
+  - name: int_ine__compraventa_vivienda_1fn
+    description: >
+      Una fila por provincia, mes y tipo de vivienda con las compraventas de la
+      tabla 6150 del INE, sin el total. 50 provincias × 96 meses × 4 tipos.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['id_provincia', 'id_mes', 'id_tipo_vivienda']
+          description: >
+            Una sola fila por provincia, mes y tipo. Si falla, se cuelan filas de
+            CCAA o de nación, o dos etiquetas del INE reciben el mismo código;
+            revisar el filtro de provincia_ine y los CASE de id_tipo_vivienda.

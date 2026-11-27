@@ -1,0 +1,35 @@
+# =============================================================================
+# Exposures: quién consume los modelos de Gold fuera de dbt
+# =============================================================================
+# Una exposure no crea nada en Snowflake: documenta un consumidor (aquí, el
+# informe de Power BI) y de qué modelos depende. Así aparece en el linaje y se
+# puede seleccionar todo lo que necesita:
+#   dbt build --select +exposure:informe_suelo_vs_coste_de_vida
+# =============================================================================
+
+exposures:
+  - name: informe_suelo_vs_coste_de_vida
+    label: Informe suelo frente al coste de vida
+    type: dashboard
+    maturity: medium
+    description: >
+      Informe de Power BI (fichero powerbi/suelo_vs_coste_de_vida.pbix), en modo
+      importación desde PRO_GOLD_DB con REPORTING_ROLE. Tiene 5 páginas, una por
+      caso de uso más una de exploración: "Suelo frente al coste de vida" (caso 1,
+      mart_suelo_vs_ipc), "Pandemia: caída y rebote" (caso 2, mart_pandemia),
+      "Mapa del mercado" (caso 3, mart_territorio), "Mapa del coste de vida"
+      (caso 4, mart_coste_vida) y "Explorar", que usa la estrella (3 dimensiones
+      y 3 hechos).
+    depends_on:
+      - ref('mart_suelo_vs_ipc')
+      - ref('mart_pandemia')
+      - ref('mart_territorio')
+      - ref('mart_coste_vida')
+      - ref('dim_lugar')
+      - ref('dim_tiempo')
+      - ref('dim_grupo_ipc')
+      - ref('fct_suelo_trimestral')
+      - ref('fct_compraventa_vivienda_mensual')
+      - ref('fct_ipc_mensual')
+    owner:
+      name: Santiago

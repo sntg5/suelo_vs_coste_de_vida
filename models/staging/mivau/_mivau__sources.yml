@@ -1,0 +1,71 @@
+# =============================================================================
+# Source mivau · capa Bronze
+# =============================================================================
+# Estadística de Precios de Suelo Urbano del Ministerio de Vivienda y Agenda
+# Urbana, cargada con SP_CARGAR_BRONZE desde los XLS convertidos a CSV. Se
+# carga la hoja entera (títulos y cabeceras incluidos) en 94 columnas con el
+# nombre de su letra de Excel: COL_B es el territorio y COL_C (1T 2004) a
+# COL_CN (2T 2026) son los trimestres. dbt solo lee Bronze, nunca escribe.
+# Freshness sobre _loaded_at: aviso a los 35 días y error a los 100.
+# =============================================================================
+
+sources:
+  - name: mivau
+    description: Ministerio de Vivienda y Agenda Urbana (MIVAU), precios de suelo urbano.
+    database: "{{ env_var('DBT_BRONZE_DB') }}"
+    schema: mivau
+    config:
+      loaded_at_field: _loaded_at
+      freshness:
+        warn_after: {count: 35, period: day}
+        error_after: {count: 100, period: day}
+
+    tables:
+      - name: precio_suelo
+        description: >
+          Tabla 4: precio medio del m² de suelo urbano (€/m²) por CCAA y
+          provincias. 83 filas; los datos están en las filas 14 a 75 de Excel.
+        columns:
+          - name: col_b
+            description: Territorio (nación, CCAA o provincia), con espacios finales.
+          - name: _fichero
+            description: Fichero de origen de la carga.
+            data_tests:
+              - not_null:
+                  description: Toda fila indica de qué fichero viene. Si falla, revisar SP_CARGAR_BRONZE.
+          - name: _fila
+            description: Número de fila de Excel. Permite rastrear cada dato hasta su celda.
+            data_tests:
+              - unique:
+                  description: >
+                    Cada fila de la hoja se carga una vez. Si falla, el fichero se
+                    ha cargado dos veces sin TRUNCATE y hay que repetir la carga.
+              - not_null:
+                  description: Toda fila tiene número. Si falla, revisar el COPY INTO del procedimiento.
+          - name: _loaded_at
+            description: Momento de la carga en Bronze. Lo usa el freshness.
+
+      - name: transacciones_suelo
+        description: >
+          Tabla 1: número total de transacciones de suelo urbano por CCAA y
+          provincias. 85 filas; los datos están en las filas 14 a 77 de Excel
+          (Ceuta y Melilla aparecen además por separado).
+        columns:
+          - name: col_b
+            description: Territorio (nación, CCAA o provincia), con espacios finales.
+          - name: _fichero
+            description: Fichero de origen de la carga.
+            data_tests:
+              - not_null:
+                  description: Toda fila indica de qué fichero viene. Si falla, revisar SP_CARGAR_BRONZE.
+          - name: _fila
+            description: Número de fila de Excel. Permite rastrear cada dato hasta su celda.
+            data_tests:
+              - unique:
+                  description: >
+                    Cada fila de la hoja se carga una vez. Si falla, el fichero se
+                    ha cargado dos veces sin TRUNCATE y hay que repetir la carga.
+              - not_null:
+                  description: Toda fila tiene número. Si falla, revisar el COPY INTO del procedimiento.
+          - name: _loaded_at
+            description: Momento de la carga en Bronze. Lo usa el freshness.

@@ -1,0 +1,262 @@
+# =============================================================================
+# Gold · hechos de la estrella
+# =============================================================================
+# Hechos de foto periódica, cada uno en su grano natural. No tienen clave
+# propia: su PK es la combinación de sus FK (su grano).
+# =============================================================================
+
+models:
+  - name: fct_suelo_trimestral
+    description: Una provincia en un trimestre (1.600 filas). Se une a dim_tiempo por el primer mes del trimestre.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['sk_lugar', 'id_mes']
+          description: Grano provincia × trimestre. Si falla, revisar el cruce con primer_mes.
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "MOD(id_mes, 100) IN (1, 4, 7, 10)"
+          description: El suelo solo existe en el primer mes de cada trimestre. Si falla, revisar el CTE primer_mes.
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "transacciones_con_precio = IFF(precio_m2 IS NULL, 0, num_transacciones)"
+          description: El denominador excluye los trimestres sin precio. Si falla, revisar el cálculo de transacciones_con_precio.
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "es_fiable"
+          config:
+            warn_if: ">200"
+            error_if: ">400"
+          description: >
+            Umbrales de la marca de fiabilidad. Cuenta los trimestres poco fiables
+            (menos compraventas que umbral_fiabilidad); hoy son 169 de 1.600. Avisa
+            si pasan de 200 y da error si pasan de 400, una cuarta parte del total.
+            Si avisa o falla, revisar si faltan transacciones de la tabla 1 del MIVAU
+            (cruce con el seed o unpivot) antes de dar por buenos los precios medios.
+    columns:
+      - name: sk_lugar
+        description: Provincia (FK a dim_lugar).
+        data_tests:
+          - not_null:
+              description: FK. Si falla, revisar el cálculo de sk_lugar.
+          - relationships:
+              arguments:
+                to: ref('dim_lugar')
+                field: sk_lugar
+              description: FK. Si falla, sk_lugar no se calcula igual que en dim_lugar; revisar generate_surrogate_key.
+      - name: id_mes
+        description: Primer mes del trimestre (FK a dim_tiempo).
+        data_tests:
+          - not_null:
+              description: FK. Si falla, un trimestre no tiene meses; revisar slv_mes.
+          - relationships:
+              arguments:
+                to: ref('dim_tiempo')
+                field: id_mes
+              description: FK. Si falla, revisar el CTE primer_mes.
+      - name: precio_m2
+        description: Precio medio del m² publicado (no aditiva; NULL si 'n.s.').
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+              description: Un precio es siempre positivo. Si falla, revisar slv_suelo_trimestral.
+      - name: num_transacciones
+        description: Compraventas de suelo (aditiva).
+        data_tests:
+          - not_null:
+              description: Si falla, revisar slv_suelo_trimestral.
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+              description: No hay transacciones negativas. Si falla, revisar slv_suelo_trimestral.
+      - name: transacciones_con_precio
+        description: Transacciones del trimestre si hay precio, 0 si no (denominador de las medias ponderadas).
+        data_tests:
+          - not_null:
+              description: Si falla, revisar el cálculo de transacciones_con_precio.
+      - name: precio_x_transacciones
+        description: precio_m2 × num_transacciones, 0 si no hay precio (numerador de las medias ponderadas).
+        data_tests:
+          - not_null:
+              description: Si falla, revisar el COALESCE de precio_x_transacciones.
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+              description: No puede ser negativo. Si falla, revisar el cálculo de precio_x_transacciones.
+      - name: ipc_trimestral
+        description: Media de los 3 meses del Índice general de la provincia (no aditiva).
+        data_tests:
+          - not_null:
+              description: Si falla, falta el Índice general de algún mes; revisar slv_ipc_mensual.
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+              description: Un índice es siempre positivo. Si falla, revisar slv_ipc_mensual.
+      - name: precio_hipotetico
+        description: "{{ doc('precio_hipotetico') }}"
+        data_tests:
+          - not_null:
+              description: Si falla, falta el precio base o el IPC del año base de la provincia; revisar valores_base.
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+              description: Un precio es siempre positivo. Si falla, revisar valores_base.
+      - name: hipotetico_x_transacciones
+        description: precio_hipotetico × transacciones_con_precio (numerador del hipotético ponderado).
+        data_tests:
+          - not_null:
+              description: Si falla, revisar el cálculo de hipotetico_x_transacciones.
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+              description: No puede ser negativo. Si falla, revisar el cálculo de hipotetico_x_transacciones.
+      - name: diferencia
+        description: Precio real − precio hipotético. Negativa = el suelo va por detrás del coste de vida.
+      - name: variacion_interanual
+        description: Frente al mismo trimestre del año anterior (0,083 = +8,3 %); NULL en el primer año.
+      - name: es_fiable
+        description: "{{ doc('fiabilidad') }}"
+        data_tests:
+          - not_null:
+              description: Si falla, revisar el cálculo de es_fiable.
+
+  - name: fct_ipc_mensual
+    description: >
+      Un grupo de gasto en una provincia y un mes (62.400 filas). El índice no
+      es aditivo: no se suma ni se promedia entre provincias.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['sk_lugar', 'id_mes', 'sk_grupo_ipc']
+          description: Grano provincia × mes × grupo. Si falla, revisar el grano de slv_ipc_mensual.
+    columns:
+      - name: sk_lugar
+        description: Provincia (FK a dim_lugar).
+        data_tests:
+          - not_null:
+              description: FK. Si falla, revisar el cálculo de sk_lugar.
+          - relationships:
+              arguments:
+                to: ref('dim_lugar')
+                field: sk_lugar
+              description: FK. Si falla, sk_lugar no se calcula igual que en dim_lugar; revisar generate_surrogate_key.
+      - name: id_mes
+        description: Mes (FK a dim_tiempo).
+        data_tests:
+          - not_null:
+              description: FK. Si falla, revisar slv_ipc_mensual.
+          - relationships:
+              arguments:
+                to: ref('dim_tiempo')
+                field: id_mes
+              description: FK. Si falla, hay un mes fuera del calendario; revisar el filtro de años de int_ine__ipc_mensual_1fn.
+      - name: sk_grupo_ipc
+        description: Grupo de gasto (FK a dim_grupo_ipc).
+        data_tests:
+          - not_null:
+              description: FK. Si falla, revisar el cálculo de sk_grupo_ipc.
+          - relationships:
+              arguments:
+                to: ref('dim_grupo_ipc')
+                field: sk_grupo_ipc
+              description: FK. Si falla, sk_grupo_ipc no se calcula igual que en dim_grupo_ipc; revisar generate_surrogate_key.
+      - name: indice
+        description: Índice de precios de consumo, base 2021 = 100 (no aditivo).
+        data_tests:
+          - not_null:
+              description: Si falla, falta el índice de una provincia, mes o grupo; revisar slv_ipc_mensual.
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+              description: Un índice es siempre positivo. Si falla, revisar slv_ipc_mensual.
+
+  - name: fct_compraventa_vivienda_mensual
+    description: >
+      Una provincia en un mes (4.800 filas), con una columna por tipo de
+      vivienda y el total. Solo se suman tipos del mismo criterio. Incremental
+      con estrategia delete+insert y clave sk_lugar e id_mes (el grano): en cada
+      ejecución borra y vuelve a escribir los meses de la ventana de revisión,
+      del último mes cargado menos meses_revision (12) en adelante, recalculados
+      enteros. La variación interanual se calcula con toda la historia y la
+      ventana se filtra después. Con --full-refresh se reconstruye entera.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['sk_lugar', 'id_mes']
+          description: Grano provincia × mes. Si falla, revisar el GROUP BY del CTE compraventas.
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "num_total = num_nueva + num_usada"
+          description: >
+            Los dos repartos dan el mismo total (libre + protegida = nueva +
+            usada). Si falla, revisar el bucle de tipos y el test de coherencia
+            de Silver.
+    columns:
+      - name: sk_lugar
+        description: Provincia (FK a dim_lugar).
+        data_tests:
+          - not_null:
+              description: FK. Si falla, revisar el cálculo de sk_lugar.
+          - relationships:
+              arguments:
+                to: ref('dim_lugar')
+                field: sk_lugar
+              description: FK. Si falla, sk_lugar no se calcula igual que en dim_lugar; revisar generate_surrogate_key.
+      - name: id_mes
+        description: Mes (FK a dim_tiempo).
+        data_tests:
+          - not_null:
+              description: FK. Si falla, revisar slv_compraventa_vivienda_mensual.
+          - relationships:
+              arguments:
+                to: ref('dim_tiempo')
+                field: id_mes
+              description: FK. Si falla, hay un mes fuera del calendario; revisar slv_mes.
+      - name: num_libre
+        description: Compraventas de vivienda libre (aditiva).
+        data_tests:
+          - not_null:
+              description: Si falla, falta el tipo en algún mes; revisar slv_compraventa_vivienda_mensual.
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+              description: No hay compraventas negativas. Si falla, revisar slv_compraventa_vivienda_mensual.
+      - name: num_protegida
+        description: Compraventas de vivienda protegida (aditiva).
+        data_tests:
+          - not_null:
+              description: Si falla, falta el tipo en algún mes; revisar slv_compraventa_vivienda_mensual.
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+              description: No hay compraventas negativas. Si falla, revisar slv_compraventa_vivienda_mensual.
+      - name: num_nueva
+        description: Compraventas de vivienda nueva (aditiva).
+        data_tests:
+          - not_null:
+              description: Si falla, falta el tipo en algún mes; revisar slv_compraventa_vivienda_mensual.
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+              description: No hay compraventas negativas. Si falla, revisar slv_compraventa_vivienda_mensual.
+      - name: num_usada
+        description: Compraventas de vivienda usada (aditiva).
+        data_tests:
+          - not_null:
+              description: Si falla, falta el tipo en algún mes; revisar slv_compraventa_vivienda_mensual.
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+              description: No hay compraventas negativas. Si falla, revisar slv_compraventa_vivienda_mensual.
+      - name: num_total
+        description: Total de compraventas = libre + protegida (aditiva).
+        data_tests:
+          - not_null:
+              description: Si falla, revisar el cálculo de num_total.
+      - name: variacion_interanual_total
+        description: Variación del total frente al mismo mes del año anterior (0,35 = +35 %); NULL en el primer año.

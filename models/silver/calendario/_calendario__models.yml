@@ -1,0 +1,156 @@
+# =============================================================================
+# Silver · calendario: mes → trimestre → año → etapa (3FN)
+# =============================================================================
+# Sale de int_calendario_mensual (date_spine) y de seed_etapas, no de los
+# datos. Los tipos los fija el CAST; PK, FK, UQ y CHECK los vigilan los tests.
+# =============================================================================
+
+models:
+  - name: slv_etapa
+    description: Una fila por etapa (4).
+    columns:
+      - name: id_etapa
+        description: Código de la etapa.
+        data_tests:
+          - unique:
+              description: PK. Si falla, eliminar la etapa repetida de seed_etapas.
+          - not_null:
+              description: PK. Si falla, completar el código en seed_etapas.
+          - accepted_values:
+              arguments:
+                values: ['PRE', 'PAN', 'REC', 'POS']
+              description: Solo existen las 4 etapas del diseño. Si falla, corregir seed_etapas.
+      - name: nombre_etapa
+        description: Prepandemia, Pandemia, Recuperación o Pospandemia.
+        data_tests:
+          - unique:
+              description: Si falla, dos etapas tienen el mismo nombre; corregir seed_etapas.
+          - not_null:
+              description: Si falla, completar el nombre en seed_etapas.
+      - name: descripcion
+        description: Qué cubre la etapa.
+        data_tests:
+          - not_null:
+              description: Si falla, completar la descripción en seed_etapas.
+      - name: orden_etapa
+        description: Orden cronológico, para ordenar los gráficos.
+        data_tests:
+          - unique:
+              description: Si falla, dos etapas tienen el mismo orden; corregir seed_etapas.
+          - not_null:
+              description: Si falla, completar el orden en seed_etapas.
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                max_value: 4
+              description: El orden va de 1 a 4. Si falla, corregir seed_etapas.
+
+  - name: slv_anio
+    description: Una fila por año del periodo (8) con su etapa.
+    columns:
+      - name: anio
+        description: Año natural.
+        data_tests:
+          - unique:
+              description: PK. Si falla, dos etapas de seed_etapas se solapan en algún año; corregir sus rangos.
+          - not_null:
+              description: PK. Si falla, revisar int_calendario_mensual.
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: "{{ var('anio_inicio') }}"
+                max_value: "{{ var('anio_fin') }}"
+              description: Solo años del periodo. Si falla, revisar las vars anio_inicio y anio_fin.
+      - name: id_etapa
+        description: Etapa del año.
+        data_tests:
+          - not_null:
+              description: FK. Si falla, hay un año que no cae en ninguna etapa; revisar los rangos de seed_etapas.
+          - relationships:
+              arguments:
+                to: ref('slv_etapa')
+                field: id_etapa
+              description: FK. Si falla, el año apunta a una etapa que no existe; revisar seed_etapas.
+
+  - name: slv_trimestre
+    description: Una fila por trimestre del periodo (32).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['anio', 'num_trimestre']
+          description: Clave candidata (UQ). Si falla, hay un trimestre repetido; revisar int_calendario_mensual.
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "id_trimestre = anio * 10 + num_trimestre"
+          description: La clave AAAAT cuadra con año y trimestre. Si falla, revisar int_calendario_mensual.
+    columns:
+      - name: id_trimestre
+        description: Clave AAAAT (20202 = 2T 2020).
+        data_tests:
+          - unique:
+              description: PK. Si falla, revisar int_calendario_mensual.
+          - not_null:
+              description: PK. Si falla, revisar int_calendario_mensual.
+      - name: anio
+        description: Año del trimestre.
+        data_tests:
+          - not_null:
+              description: FK. Si falla, revisar int_calendario_mensual.
+          - relationships:
+              arguments:
+                to: ref('slv_anio')
+                field: anio
+              description: FK. Si falla, el trimestre apunta a un año que no existe; revisar slv_anio.
+      - name: num_trimestre
+        description: Número de trimestre.
+        data_tests:
+          - not_null:
+              description: Si falla, revisar int_calendario_mensual.
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                max_value: 4
+              description: Va de 1 a 4. Si falla, revisar int_calendario_mensual.
+
+  - name: slv_mes
+    description: Una fila por mes del periodo (96).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['id_trimestre', 'num_mes']
+          description: Clave candidata (UQ). Si falla, hay un mes repetido; revisar int_calendario_mensual.
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "MOD(id_mes, 100) = num_mes"
+          description: La clave AAAAMM cuadra con el número de mes. Si falla, revisar int_calendario_mensual.
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "id_trimestre = FLOOR(id_mes / 100) * 10 + CEIL(num_mes / 3)"
+          description: Cada mes cae en su trimestre (abril en el T2). Si falla, revisar int_calendario_mensual.
+    columns:
+      - name: id_mes
+        description: Clave AAAAMM (202005 = mayo de 2020).
+        data_tests:
+          - unique:
+              description: PK. Si falla, revisar int_calendario_mensual.
+          - not_null:
+              description: PK. Si falla, revisar int_calendario_mensual.
+      - name: id_trimestre
+        description: Trimestre del mes.
+        data_tests:
+          - not_null:
+              description: FK. Si falla, revisar int_calendario_mensual.
+          - relationships:
+              arguments:
+                to: ref('slv_trimestre')
+                field: id_trimestre
+              description: FK. Si falla, el mes apunta a un trimestre que no existe; revisar slv_trimestre.
+      - name: num_mes
+        description: Número de mes.
+        data_tests:
+          - not_null:
+              description: Si falla, revisar int_calendario_mensual.
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                max_value: 12
+              description: Va de 1 a 12. Si falla, revisar int_calendario_mensual.

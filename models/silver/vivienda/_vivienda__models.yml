@@ -1,0 +1,105 @@
+# =============================================================================
+# Silver · vivienda: tipos de vivienda y su tabla de medidas
+# =============================================================================
+# slv_tipo_vivienda sale de los datos del INE; slv_compraventa_vivienda_mensual
+# resuelve la relación ternaria provincia × mes × tipo. Los tipos los fija el
+# CAST. Los tests de completitud y de coherencia están en tests/singular/.
+# =============================================================================
+
+models:
+  - name: slv_tipo_vivienda
+    description: >
+      Una fila por tipo de vivienda (4). Dos criterios que reparten el mismo
+      total; solo se suman tipos del mismo criterio.
+    columns:
+      - name: id_tipo_vivienda
+        description: Código del tipo (LIBRE, PROTEGIDA, NUEVA o USADA).
+        data_tests:
+          - unique:
+              description: >
+                PK. Si falla, una etiqueta del INE tiene dos nombres o dos
+                criterios; revisar los CASE de int_ine__compraventa_vivienda_1fn.
+          - not_null:
+              description: >
+                PK. Si falla, el INE ha publicado una etiqueta nueva que no tiene
+                código; añadirla a los CASE de int_ine__compraventa_vivienda_1fn.
+          - accepted_values:
+              arguments:
+                values: ['LIBRE', 'PROTEGIDA', 'NUEVA', 'USADA']
+              description: Solo existen los 4 tipos del diseño. Si falla, revisar los CASE de int_ine__compraventa_vivienda_1fn.
+      - name: nombre_tipo
+        description: Etiqueta del INE tal cual (por ejemplo, Vivienda libre).
+        data_tests:
+          - unique:
+              description: Si falla, dos códigos tienen la misma etiqueta; revisar los CASE de int_ine__compraventa_vivienda_1fn.
+          - not_null:
+              description: Si falla, revisar la columna regimen_estado de staging.
+      - name: criterio
+        description: Reparto al que pertenece el tipo, Régimen (libre / protegida) o Estado (nueva / usada).
+        data_tests:
+          - not_null:
+              description: Si falla, un tipo no tiene criterio; revisar los CASE de int_ine__compraventa_vivienda_1fn.
+          - accepted_values:
+              arguments:
+                values: ['Régimen', 'Estado']
+              description: Solo hay dos criterios. Si falla, revisar los CASE de int_ine__compraventa_vivienda_1fn.
+
+  - name: slv_compraventa_vivienda_mensual
+    description: >
+      Un tipo de vivienda en una provincia y un mes (19.200 filas). Incremental
+      con estrategia merge y clave id_provincia, id_mes e id_tipo_vivienda: en
+      cada ejecución solo procesa la ventana de revisión, del último mes cargado
+      menos meses_revision (12) en adelante; actualiza los meses que el INE ha
+      corregido e inserta los nuevos. Con --full-refresh se reconstruye entera.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['id_provincia', 'id_mes', 'id_tipo_vivienda']
+          description: PK compuesta. Si falla, revisar el grano de int_ine__compraventa_vivienda_1fn.
+    columns:
+      - name: id_provincia
+        description: Provincia.
+        data_tests:
+          - not_null:
+              description: FK. Si falla, revisar slv_provincia.
+          - relationships:
+              arguments:
+                to: ref('slv_provincia')
+                field: id_provincia
+              description: FK. Si falla, hay una provincia que no existe en slv_provincia; revisar el cruce con el seed.
+      - name: id_mes
+        description: Mes.
+        data_tests:
+          - not_null:
+              description: FK. Si falla, revisar slv_mes.
+          - relationships:
+              arguments:
+                to: ref('slv_mes')
+                field: id_mes
+              description: FK. Si falla, hay un mes que no existe en slv_mes; revisar slv_mes.
+      - name: id_tipo_vivienda
+        description: Tipo de vivienda.
+        data_tests:
+          - not_null:
+              description: FK. Si falla, revisar slv_tipo_vivienda.
+          - relationships:
+              arguments:
+                to: ref('slv_tipo_vivienda')
+                field: id_tipo_vivienda
+              description: FK. Si falla, hay un tipo que no existe en slv_tipo_vivienda; revisar slv_tipo_vivienda.
+      - name: num_compraventas
+        description: >
+          Compraventas de viviendas inscritas en el mes (INE tabla 6150). Los
+          últimos meses son provisionales.
+        data_tests:
+          - not_null:
+              description: >
+                El INE publica todos los meses del periodo. Si falla, falta un
+                dato para una provincia, mes o tipo; consultar las filas guardadas
+                en dbt_jobs.
+              config:
+                store_failures: true
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+              description: No hay compraventas negativas. Si falla, revisar la conversión de FN_TEXTO_A_NUMERO.

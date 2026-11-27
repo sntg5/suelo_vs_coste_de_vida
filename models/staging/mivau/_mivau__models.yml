@@ -1,0 +1,38 @@
+# =============================================================================
+# Modelos de staging del MIVAU
+# =============================================================================
+# Vistas 1:1 con Bronze. Los tests de calidad de estos datos (completitud,
+# conciliación con el total nacional, nulos esperados) van en Silver, donde
+# ya hay una fila por provincia y trimestre.
+# =============================================================================
+
+models:
+  - name: stg_mivau__precio_suelo
+    description: >
+      Tabla 4 del MIVAU con el territorio recortado y los 90 trimestres (col_c
+      = 1T 2004 ... col_cn = 2T 2026) convertidos a número. Mantiene todas las
+      filas de la hoja, incluidos títulos, cabeceras, CCAA y total nacional.
+    columns:
+      - name: _fila
+        description: Fila de Excel (los datos están en las filas 14 a 75).
+      - name: territorio
+        description: Nación, CCAA o provincia tal como lo escribe el ministerio, sin espacios sobrantes.
+      - name: _fichero
+        description: Fichero de origen de la carga.
+      - name: _loaded_at
+        description: Momento de la carga en Bronze.
+
+  - name: stg_mivau__transacciones_suelo
+    description: >
+      Tabla 1 del MIVAU con el territorio recortado y los 90 trimestres (col_c
+      = 1T 2004 ... col_cn = 2T 2026) convertidos a número. Mantiene todas las
+      filas de la hoja, incluidos títulos, cabeceras, CCAA y total nacional.
+    columns:
+      - name: _fila
+        description: Fila de Excel (los datos están en las filas 14 a 77).
+      - name: territorio
+        description: Nación, CCAA o provincia tal como lo escribe el ministerio, sin espacios sobrantes.
+      - name: _fichero
+        description: Fichero de origen de la carga.
+      - name: _loaded_at
+        description: Momento de la carga en Bronze.

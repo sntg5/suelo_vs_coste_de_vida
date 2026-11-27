@@ -1,0 +1,97 @@
+# =============================================================================
+# Silver · IPC: grupos de gasto y su tabla de medidas
+# =============================================================================
+# slv_grupo_ipc sale de los datos del INE; slv_ipc_mensual resuelve la
+# relación ternaria provincia × mes × grupo. Los tipos los fija el CAST.
+# =============================================================================
+
+models:
+  - name: slv_grupo_ipc
+    description: Una fila por grupo de gasto del IPC (13).
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "es_indice_general = (id_grupo = '00')"
+          description: Solo el grupo 00 es el Índice general. Si falla, revisar el CAST de es_indice_general.
+    columns:
+      - name: id_grupo
+        description: Código ECOICOP; 00 = Índice general (cesta completa).
+        data_tests:
+          - unique:
+              description: >
+                PK. Si falla, un grupo tiene dos nombres distintos en el INE;
+                revisar separar_codigo_nombre o un cambio de etiqueta del INE.
+          - not_null:
+              description: PK. Si falla, revisar el COALESCE a '00' de int_ine__ipc_mensual_1fn.
+          - accepted_values:
+              arguments:
+                values: ['00', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']
+              description: >
+                Solo existen el 00 y los 12 grupos ECOICOP. Si falla, el INE ha
+                añadido o cambiado un grupo; comprobar el cambio antes de aceptarlo.
+      - name: nombre_grupo
+        description: Nombre del grupo tal como lo publica el INE.
+        data_tests:
+          - unique:
+              description: Si falla, dos códigos tienen el mismo nombre; revisar separar_codigo_nombre.
+          - not_null:
+              description: Si falla, un grupo ha quedado sin nombre al separar código y nombre; revisar separar_codigo_nombre.
+      - name: es_indice_general
+        description: TRUE solo para la cesta completa.
+        data_tests:
+          - not_null:
+              description: Si falla, revisar el cálculo de es_indice_general.
+
+  - name: slv_ipc_mensual
+    description: Un grupo de gasto en una provincia y un mes (62.400 filas).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['id_provincia', 'id_mes', 'id_grupo']
+          description: PK compuesta. Si falla, revisar int_ine__ipc_mensual_1fn.
+    columns:
+      - name: id_provincia
+        description: Provincia.
+        data_tests:
+          - not_null:
+              description: FK. Si falla, revisar slv_provincia.
+          - relationships:
+              arguments:
+                to: ref('slv_provincia')
+                field: id_provincia
+              description: FK. Si falla, hay una provincia que no existe en slv_provincia; revisar el cruce con el seed.
+      - name: id_mes
+        description: Mes.
+        data_tests:
+          - not_null:
+              description: FK. Si falla, revisar slv_mes.
+          - relationships:
+              arguments:
+                to: ref('slv_mes')
+                field: id_mes
+              description: FK. Si falla, hay un mes que no existe en slv_mes; revisar slv_mes.
+      - name: id_grupo
+        description: Grupo de gasto.
+        data_tests:
+          - not_null:
+              description: FK. Si falla, revisar slv_grupo_ipc.
+          - relationships:
+              arguments:
+                to: ref('slv_grupo_ipc')
+                field: id_grupo
+              description: FK. Si falla, hay un grupo que no existe en slv_grupo_ipc; revisar slv_grupo_ipc.
+      - name: indice
+        description: Índice de precios de consumo, base 2021 = 100 (INE tabla 50918).
+        data_tests:
+          - not_null:
+              description: >
+                El INE publica todos los índices del periodo. Si falla, falta un
+                dato para una provincia, mes o grupo; consultar las filas
+                guardadas en dbt_jobs.
+              config:
+                store_failures: true
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+              description: Un índice es siempre positivo. Si falla, revisar la conversión de la coma decimal en FN_TEXTO_A_NUMERO.

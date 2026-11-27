@@ -1,0 +1,94 @@
+# =============================================================================
+# Modelos de staging del INE
+# =============================================================================
+# Vistas 1:1 con Bronze. Los tests comprueban que las UDFs convierten todas
+# las filas: si una no se puede convertir, sale NULL y el test lo detecta.
+# Las filas que fallan se guardan en el esquema dbt_jobs (store_failures).
+# =============================================================================
+
+models:
+  - name: stg_ine__ipc_provincial
+    description: >
+      Tabla 50918 del INE con el periodo como fecha y el valor como número.
+      Mantiene todas las filas: Nacional, 52 provincias, 13 grupos, 4 tipos
+      de dato y los meses de 2002 a 2025.
+    columns:
+      - name: _fila
+        description: Fila del fichero (1 = primera fila de datos).
+      - name: provincia_ine
+        description: Código y nombre de la provincia en un solo campo (`01 Araba/Álava`), o `Nacional`.
+      - name: grupo_ecoicop
+        description: Código y nombre del grupo (`04 Vivienda, agua…`); `Índice general` no trae código.
+      - name: tipo_dato
+        description: Índice, Variación mensual, Variación anual o Variación en lo que va de año.
+      - name: periodo
+        description: Mes como texto, tal como lo publica el INE (`2025M12`).
+      - name: fecha_mes
+        description: Primer día del mes del periodo.
+        data_tests:
+          - not_null:
+              description: >
+                Todos los periodos se convierten a fecha. Si falla, el INE ha
+                cambiado el formato del periodo (antes '2025M12') y
+                FN_PERIODO_INE_A_FECHA no lo reconoce; revisar la UDF.
+      - name: valor
+        description: Índice o variación según tipo_dato, como número.
+        data_tests:
+          - not_null:
+              description: >
+                Todos los valores se convierten a número. Si falla, hay un
+                marcador nuevo que FN_TEXTO_A_NUMERO no reconoce; consultar las
+                filas guardadas en dbt_jobs, localizarlas en Bronze por _fila y
+                ampliar la UDF.
+              config:
+                store_failures: true
+      - name: _fichero
+        description: Fichero de origen de la carga.
+      - name: _loaded_at
+        description: Momento de la carga en Bronze.
+
+  - name: stg_ine__compraventa_viviendas
+    description: >
+      Tabla 6150 del INE con el periodo como fecha y el número de compraventas
+      como número. Mantiene todas las filas: nación, CCAA, provincias, las 5
+      categorías y los meses de 2007 a 2026.
+    columns:
+      - name: _fila
+        description: Fila del fichero (1 = primera fila de datos).
+      - name: ccaa_ine
+        description: Código y nombre de la CCAA (`09 Cataluña`); NULL en las filas nacionales.
+      - name: provincia_ine
+        description: Código y nombre de la provincia (`09 Burgos`); NULL en las filas de nación y CCAA.
+      - name: regimen_estado
+        description: Viviendas Total, libre, protegida, nueva o usada.
+      - name: periodo
+        description: Mes como texto, tal como lo publica el INE (`2025M12`).
+      - name: fecha_mes
+        description: Primer día del mes del periodo.
+        data_tests:
+          - not_null:
+              description: >
+                Todos los periodos se convierten a fecha. Si falla, el INE ha
+                cambiado el formato del periodo y FN_PERIODO_INE_A_FECHA no lo
+                reconoce; revisar la UDF.
+      - name: num_compraventas
+        description: Compraventas de viviendas inscritas en el mes.
+        data_tests:
+          - not_null:
+              description: >
+                Todos los valores se convierten a número. Si falla, hay un
+                marcador nuevo que FN_TEXTO_A_NUMERO no reconoce; consultar las
+                filas guardadas en dbt_jobs y ampliar la UDF.
+              config:
+                store_failures: true
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+              description: >
+                No hay compraventas negativas. Si falla, la conversión ha leído
+                mal el número (un signo o un separador nuevo); revisar
+                FN_TEXTO_A_NUMERO.
+      - name: _fichero
+        description: Fichero de origen de la carga.
+      - name: _loaded_at
+        description: Momento de la carga en Bronze.

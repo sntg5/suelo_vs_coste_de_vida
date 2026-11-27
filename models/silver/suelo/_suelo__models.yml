@@ -1,0 +1,62 @@
+# =============================================================================
+# Silver · suelo: precio y transacciones por provincia y trimestre
+# =============================================================================
+# Resuelve la relación N:M provincia × trimestre (MIVAU tablas 1 y 4). Los
+# tests de completitud y conciliación están en tests/singular/.
+# =============================================================================
+
+models:
+  - name: slv_suelo_trimestral
+    description: Una provincia en un trimestre (1.600 filas).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['id_provincia', 'id_trimestre']
+          description: PK compuesta. Si falla, revisar el cruce de int_mivau__suelo_trimestral_1fn.
+    columns:
+      - name: id_provincia
+        description: Provincia.
+        data_tests:
+          - not_null:
+              description: FK. Si falla, revisar slv_provincia.
+          - relationships:
+              arguments:
+                to: ref('slv_provincia')
+                field: id_provincia
+              description: FK. Si falla, hay una provincia que no existe en slv_provincia; revisar el cruce con el seed.
+      - name: id_trimestre
+        description: Trimestre.
+        data_tests:
+          - not_null:
+              description: FK. Si falla, revisar slv_trimestre.
+          - relationships:
+              arguments:
+                to: ref('slv_trimestre')
+                field: id_trimestre
+              description: FK. Si falla, hay un trimestre que no existe en slv_trimestre; revisar slv_trimestre.
+      - name: precio_m2
+        description: >
+          Precio medio del m² de suelo urbano vendido en el trimestre (€/m²,
+          MIVAU tabla 4). NULL si el ministerio no lo publica ('n.s.').
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+              description: >
+                Un precio es siempre positivo. Si falla, revisar la conversión de
+                FN_TEXTO_A_NUMERO (coma o punto).
+      - name: num_transacciones
+        description: Compraventas de suelo urbano (MIVAU tabla 1).
+        data_tests:
+          - not_null:
+              description: >
+                Hay transacciones en todos los trimestres. Si falla, falta una
+                provincia o un trimestre en la tabla 1; revisar nombre_mivau en el
+                seed (espacios o tildes) y las filas guardadas en dbt_jobs.
+              config:
+                store_failures: true
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+              description: No hay transacciones negativas. Si falla, revisar la conversión del número.

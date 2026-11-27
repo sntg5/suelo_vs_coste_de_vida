@@ -1,0 +1,181 @@
+# =============================================================================
+# Gold · dimensiones de la estrella
+# =============================================================================
+# dim_lugar y dim_tiempo son dimensiones conformadas: las comparten los 3
+# hechos, así que un filtro de CCAA o de etapa afecta a todo el informe.
+# dim_grupo_ipc solo la usa fct_ipc_mensual (caso 4).
+# =============================================================================
+
+models:
+  - name: dim_lugar
+    description: Una fila por provincia (50) con su jerarquía país → zona → CCAA → provincia.
+    columns:
+      - name: sk_lugar
+        description: Clave subrogada (generate_surrogate_key del código INE de la provincia).
+        data_tests:
+          - unique:
+              description: PK. Si falla, revisar el cálculo de generate_surrogate_key.
+          - not_null:
+              description: PK. Si falla, revisar el cálculo de generate_surrogate_key.
+      - name: id_provincia
+        description: Código INE de la provincia (clave natural, conservada como atributo).
+        data_tests:
+          - unique:
+              description: Si falla, una provincia cruza con dos CCAA o dos zonas; revisar los joins con Silver.
+          - not_null:
+              description: Si falla, revisar slv_provincia.
+      - name: provincia
+        description: Nombre en orden natural (en Power BI, categoría "Estado o provincia").
+        data_tests:
+          - unique:
+              description: Si falla, revisar los nombres de slv_provincia.
+          - not_null:
+              description: Si falla, revisar slv_provincia.
+      - name: id_ccaa
+        description: Código INE de la comunidad autónoma.
+        data_tests:
+          - not_null:
+              description: Si falla, una provincia no cruza con su CCAA; revisar slv_comunidad_autonoma.
+      - name: ccaa
+        description: Nombre de la comunidad autónoma.
+        data_tests:
+          - not_null:
+              description: Si falla, revisar slv_comunidad_autonoma.
+      - name: id_zona
+        description: Código de zona.
+        data_tests:
+          - not_null:
+              description: Si falla, una CCAA no cruza con su zona; revisar slv_zona.
+          - accepted_values:
+              arguments:
+                values: ['NOR', 'SUR']
+              description: Solo existen NOR y SUR. Si falla, revisar slv_zona.
+      - name: zona
+        description: Norte o Sur.
+        data_tests:
+          - not_null:
+              description: Si falla, revisar slv_zona.
+      - name: pais
+        description: Constante España, para la categoría geográfica de los mapas.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['España']
+              description: Valor constante. Si falla, revisar el literal de dim_lugar.
+
+  - name: dim_tiempo
+    description: Una fila por mes del periodo (96) con su jerarquía etapa → año → trimestre → mes.
+    columns:
+      - name: id_mes
+        description: Clave AAAAMM (202005 = mayo de 2020).
+        data_tests:
+          - unique:
+              description: PK. Si falla, un mes cruza con dos trimestres, años o etapas; revisar Silver.
+          - not_null:
+              description: PK. Si falla, revisar slv_mes.
+      - name: fecha_inicio_mes
+        description: Día 1 del mes en tipo fecha, eje de tiempo continuo en Power BI. No es la clave.
+        data_tests:
+          - unique:
+              description: Si falla, revisar el cálculo con DATE_FROM_PARTS.
+          - not_null:
+              description: Si falla, revisar el cálculo con DATE_FROM_PARTS.
+      - name: num_mes
+        description: Número de mes (1-12).
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                max_value: 12
+              description: Va de 1 a 12. Si falla, revisar slv_mes.
+      - name: id_trimestre
+        description: Clave AAAAT del trimestre.
+        data_tests:
+          - not_null:
+              description: Si falla, un mes no cruza con su trimestre; revisar slv_trimestre.
+      - name: num_trimestre
+        description: Número de trimestre (1-4).
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                max_value: 4
+              description: Va de 1 a 4. Si falla, revisar slv_trimestre.
+      - name: etiqueta_trimestre
+        description: Etiqueta del trimestre para los ejes (2020-T2). Se ordena por id_trimestre.
+        data_tests:
+          - not_null:
+              description: Si falla, revisar la concatenación de etiqueta_trimestre.
+      - name: anio
+        description: Año.
+        data_tests:
+          - not_null:
+              description: Si falla, un trimestre no cruza con su año; revisar slv_anio.
+      - name: id_etapa
+        description: Código de la etapa.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['PRE', 'PAN', 'REC', 'POS']
+              description: Solo existen las 4 etapas. Si falla, revisar slv_etapa.
+      - name: etapa
+        description: "{{ doc('etapa') }}"
+        data_tests:
+          - not_null:
+              description: Si falla, un año no cruza con su etapa; revisar slv_anio y slv_etapa.
+      - name: orden_etapa
+        description: Orden de la etapa, para "Ordenar por columna" en Power BI.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                max_value: 4
+              description: Va de 1 a 4. Si falla, revisar slv_etapa.
+
+  - name: dim_grupo_ipc
+    description: >
+      Una fila por grupo de gasto del IPC (13): el Índice general (00) y los 12
+      grupos ECOICOP. Solo la usa fct_ipc_mensual.
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "es_indice_general = (id_grupo = '00')"
+          description: Solo el grupo 00 es el Índice general. Si falla, revisar es_indice_general en slv_grupo_ipc.
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "es_grupo_vivienda = (id_grupo = '04')"
+          description: Solo el grupo 04 es el de vivienda. Si falla, revisar el cálculo de es_grupo_vivienda.
+    columns:
+      - name: sk_grupo_ipc
+        description: Clave subrogada (generate_surrogate_key del código ECOICOP).
+        data_tests:
+          - unique:
+              description: PK. Si falla, revisar el cálculo de generate_surrogate_key.
+          - not_null:
+              description: PK. Si falla, revisar el cálculo de generate_surrogate_key.
+      - name: id_grupo
+        description: Código ECOICOP (00 = Índice general), conservado como atributo.
+        data_tests:
+          - unique:
+              description: Si falla, un grupo tiene dos nombres; revisar slv_grupo_ipc.
+          - not_null:
+              description: Si falla, revisar slv_grupo_ipc.
+      - name: nombre_grupo
+        description: Nombre del grupo de gasto tal como lo publica el INE.
+        data_tests:
+          - not_null:
+              description: Si falla, revisar slv_grupo_ipc.
+      - name: nombre_grupo_corto
+        description: >
+          Rótulo corto del grupo para los gráficos. Es el nombre del INE salvo en
+          el 04, "Vivienda (alquiler y suministros)", y en el 05, "Muebles y
+          artículos del hogar".
+        data_tests:
+          - unique:
+              description: Cada grupo tiene un rótulo distinto. Si falla, revisar el CASE de nombre_grupo_corto.
+          - not_null:
+              description: Todos los grupos tienen rótulo. Si falla, revisar el CASE de nombre_grupo_corto y slv_grupo_ipc.
+      - name: es_indice_general
+        description: TRUE solo en la cesta completa (00). Las barras por grupo lo excluyen.
+      - name: es_grupo_vivienda
+        description: TRUE solo en el grupo 04, vivienda (alquiler y suministros, no la compra).
